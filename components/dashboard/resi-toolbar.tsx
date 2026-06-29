@@ -1,14 +1,14 @@
 import type { CourierOptionRow, ResiRow } from "@/lib/database.types";
 import { exportResiRowsToXlsx } from "@/lib/export-xlsx";
-import type { DataViewMode } from "@/lib/data-view-mode";
+import { formatDateRangeLabel } from "@/lib/resi-filters";
 import type { ResiFilterCourier, ResiFilterStatus } from "@/lib/resi-filters";
 
 type ResiToolbarProps = {
   searchQuery: string;
   statusFilter: ResiFilterStatus;
   courierFilter: ResiFilterCourier;
-  dateFilter: string;
-  dataViewMode: DataViewMode;
+  dateFrom: string;
+  dateTo: string;
   scanFilter: string | null;
   resultCount: number;
   totalCount: number;
@@ -17,7 +17,8 @@ type ResiToolbarProps = {
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: ResiFilterStatus) => void;
   onCourierFilterChange: (value: ResiFilterCourier) => void;
-  onDateFilterChange: (value: string) => void;
+  onDateFromChange: (value: string) => void;
+  onDateToChange: (value: string) => void;
   onClearScanFilter: () => void;
   onClearAllFilters: () => void;
 };
@@ -29,8 +30,8 @@ export function ResiToolbar({
   searchQuery,
   statusFilter,
   courierFilter,
-  dateFilter,
-  dataViewMode,
+  dateFrom,
+  dateTo,
   scanFilter,
   resultCount,
   totalCount,
@@ -39,14 +40,18 @@ export function ResiToolbar({
   onSearchChange,
   onStatusFilterChange,
   onCourierFilterChange,
-  onDateFilterChange,
+  onDateFromChange,
+  onDateToChange,
   onClearScanFilter,
   onClearAllFilters,
 }: ResiToolbarProps) {
+  const rangeLabel = formatDateRangeLabel(dateFrom, dateTo);
+
   const hasFilters =
     Boolean(scanFilter) ||
     Boolean(searchQuery.trim()) ||
-    (dataViewMode === "all" && Boolean(dateFilter)) ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo) ||
     statusFilter !== "all" ||
     courierFilter !== "all";
 
@@ -83,19 +88,30 @@ export function ResiToolbar({
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center">
-          {dataViewMode === "all" && (
-            <label className="flex min-h-11 flex-col justify-center gap-1 text-sm text-zinc-600 sm:flex-row sm:items-center sm:gap-2">
-              <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500 sm:normal-case sm:tracking-normal">
-                Tanggal
-              </span>
-              <input
-                type="date"
-                value={dateFilter}
-                onChange={(e) => onDateFilterChange(e.target.value)}
-                className={fieldClass}
-              />
-            </label>
-          )}
+          <label className="flex min-h-11 flex-col justify-center gap-1 text-sm text-zinc-600 sm:flex-row sm:items-center sm:gap-2">
+            <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500 sm:normal-case sm:tracking-normal">
+              Dari
+            </span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => onDateFromChange(e.target.value)}
+              className={fieldClass}
+            />
+          </label>
+
+          <label className="flex min-h-11 flex-col justify-center gap-1 text-sm text-zinc-600 sm:flex-row sm:items-center sm:gap-2">
+            <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500 sm:normal-case sm:tracking-normal">
+              Sampai
+            </span>
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => onDateToChange(e.target.value)}
+              className={fieldClass}
+            />
+          </label>
 
           <select
             value={courierFilter}
@@ -148,17 +164,15 @@ export function ResiToolbar({
               </button>
             </span>
           )}
-          {dataViewMode === "today" && (
-            <span className="inline-flex min-h-11 items-center rounded-xl border border-sky-200 bg-sky-50 px-3 text-sm font-medium text-sky-800">
-              Filter: hari ini
-            </span>
-          )}
-          {dataViewMode === "all" && dateFilter && (
+          {rangeLabel && (
             <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
-              Tanggal: {dateFilter}
+              Tanggal: {rangeLabel}
               <button
                 type="button"
-                onClick={() => onDateFilterChange("")}
+                onClick={() => {
+                  onDateFromChange("");
+                  onDateToChange("");
+                }}
                 className="rounded-full px-1.5 py-0.5 active:bg-blue-200"
                 aria-label="Hapus filter tanggal"
               >

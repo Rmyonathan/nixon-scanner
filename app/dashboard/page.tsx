@@ -15,7 +15,7 @@ import {
 } from "@/lib/resi";
 import { getCourierOptions } from "@/lib/courier-options";
 import { defaultCourierOptions } from "@/lib/couriers";
-import { filterResiRows, filterRowsByDate, getTodayLocalDate, type ResiFilterCourier, type ResiFilterStatus } from "@/lib/resi-filters";
+import { filterResiRows, filterRowsByDateRange, getTodayLocalDate, type ResiFilterCourier, type ResiFilterStatus } from "@/lib/resi-filters";
 import { playScanSound } from "@/lib/scan-audio";
 import { getSupabaseConfigError } from "@/lib/supabase";
 import type { CourierOptionRow, ResiRow, ResiStatus } from "@/lib/database.types";
@@ -55,7 +55,8 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ResiFilterStatus>("all");
   const [courierFilter, setCourierFilter] = useState<ResiFilterCourier>("all");
-  const [dateFilter, setDateFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState(getTodayLocalDate);
+  const [dateTo, setDateTo] = useState(getTodayLocalDate);
   const [scanFilter, setScanFilter] = useState<string | null>(null);
   const [courierOptions, setCourierOptions] = useState<CourierOptionRow[]>(
     defaultCourierOptions(),
@@ -67,19 +68,12 @@ export default function DashboardPage() {
     variant: "success" | "error";
   } | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
-  const [scanMode, setScanMode] = useState<ScanMode>(
-    () => getStoredScanMode(),
-  );
-  const [dataViewMode, setDataViewMode] = useState<DataViewMode>(
-    () => getStoredDataViewMode(),
-  );
-
-  const effectiveDateFilter =
-    dataViewMode === "today" ? getTodayLocalDate() : dateFilter;
+  const [scanMode, setScanMode] = useState<ScanMode>("sebelum_di_pack");
+  const [dataViewMode, setDataViewMode] = useState<DataViewMode>("today");
 
   const viewScopedRows = useMemo(
-    () => filterRowsByDate(rows, effectiveDateFilter),
-    [rows, effectiveDateFilter],
+    () => filterRowsByDateRange(rows, dateFrom, dateTo),
+    [rows, dateFrom, dateTo],
   );
 
   const displayedRows = useMemo(
@@ -89,20 +83,25 @@ export default function DashboardPage() {
         searchQuery,
         statusFilter,
         courierFilter,
-        dateFilter: "",
       }),
     [viewScopedRows, scanFilter, searchQuery, statusFilter, courierFilter],
   );
 
-  const todayLabel = useMemo(
-    () =>
-      new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(
-        new Date(),
-      ),
-    [],
-  );
-
   useEffect(() => {
+    const storedViewMode = getStoredDataViewMode();
+    const today = getTodayLocalDate();
+
+    setScanMode(getStoredScanMode());
+    setDataViewMode(storedViewMode);
+
+    if (storedViewMode === "all") {
+      setDateFrom("");
+      setDateTo("");
+    } else {
+      setDateFrom(today);
+      setDateTo(today);
+    }
+
     inputRef.current?.focus();
   }, []);
 
@@ -120,9 +119,8 @@ export default function DashboardPage() {
       }
 
       try {
-        const limit = dataViewMode === "all" ? 2000 : 500;
         const [data, couriers] = await Promise.all([
-          getRecentResi(limit),
+          getRecentResi(2000),
           getCourierOptions().catch(() => defaultCourierOptions()),
         ]);
         if (!cancelled) {
@@ -147,7 +145,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [dataViewMode]);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -171,7 +169,35 @@ export default function DashboardPage() {
     setSearchQuery("");
     setStatusFilter("all");
     setCourierFilter("all");
-    setDateFilter("");
+    if (dataViewMode === "today") {
+      const today = getTodayLocalDate();
+      setDateFrom(today);
+      setDateTo(today);
+    } else {
+      setDateFrom("");
+      setDateTo("");
+    }
+  }
+
+  function applyDateRange(from: string, to: string) {
+    setDateFrom(from);
+    setDateTo(to);
+  }
+
+  function handleDateFromChange(value: string) {
+    applyDateRange(value, dateTo);
+    if (dataViewMode === "today") {
+      setDataViewMode("all");
+      storeDataViewMode("all");
+    }
+  }
+
+  function handleDateToChange(value: string) {
+    applyDateRange(dateFrom, value);
+    if (dataViewMode === "today") {
+      setDataViewMode("all");
+      storeDataViewMode("all");
+    }
   }
 
   function openInputModal(
@@ -191,8 +217,13 @@ export default function DashboardPage() {
   function handleDataViewModeChange(mode: DataViewMode) {
     setDataViewMode(mode);
     storeDataViewMode(mode);
+    const today = getTodayLocalDate();
     if (mode === "today") {
-      setDateFilter("");
+      setDateFrom(today);
+      setDateTo(today);
+    } else {
+      setDateFrom("");
+      setDateTo("");
     }
     setScanFilter(null);
     setHighlightedResi(null);
@@ -427,8 +458,11 @@ export default function DashboardPage() {
         <section className="mb-4 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm ring-1 ring-zinc-950/5 sm:mb-6 sm:p-5">
           <DataViewToggle
             mode={dataViewMode}
-            todayLabel={todayLabel}
-            onChange={handleDataViewModeChange}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onModeChange={handleDataViewModeChange}
+            onDateFromChange={handleDateFromChange}
+            onDateToChange={handleDateToChange}
           />
         </section>
 
@@ -516,8 +550,8 @@ export default function DashboardPage() {
             searchQuery={searchQuery}
             statusFilter={statusFilter}
             courierFilter={courierFilter}
-            dateFilter={dateFilter}
-            dataViewMode={dataViewMode}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
             scanFilter={scanFilter}
             resultCount={displayedRows.length}
             totalCount={viewScopedRows.length}
@@ -526,7 +560,8 @@ export default function DashboardPage() {
             onSearchChange={setSearchQuery}
             onStatusFilterChange={setStatusFilter}
             onCourierFilterChange={setCourierFilter}
-            onDateFilterChange={setDateFilter}
+            onDateFromChange={handleDateFromChange}
+            onDateToChange={handleDateToChange}
             onClearScanFilter={() => {
               setScanFilter(null);
               setHighlightedResi(null);

@@ -3,6 +3,11 @@ import type { ResiRow, ResiStatus } from "@/lib/database.types";
 export type ResiFilterStatus = ResiStatus | "all";
 export type ResiFilterCourier = string | "all";
 
+export type DateRangeFilter = {
+  dateFrom: string;
+  dateTo: string;
+};
+
 function formatRowDates(iso: string) {
   const date = new Date(iso);
   return [
@@ -31,25 +36,40 @@ function matchesSearchQuery(row: ResiRow, query: string) {
   return haystack.includes(query);
 }
 
-function isSameLocalDate(iso: string, yyyyMmDd: string) {
+export function getLocalDateString(iso: string) {
   const date = new Date(iso);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}` === yyyyMmDd;
-}
-
-export function getTodayLocalDate() {
-  const date = new Date();
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-export function filterRowsByDate(rows: ResiRow[], yyyyMmDd: string) {
-  if (!yyyyMmDd) return rows;
-  return rows.filter((row) => isSameLocalDate(row.updated_at, yyyyMmDd));
+export function getTodayLocalDate() {
+  return getLocalDateString(new Date().toISOString());
+}
+
+export function filterRowsByDateRange(
+  rows: ResiRow[],
+  dateFrom: string,
+  dateTo: string,
+) {
+  if (!dateFrom && !dateTo) return rows;
+
+  const start = dateFrom || dateTo;
+  const end = dateTo || dateFrom;
+
+  return rows.filter((row) => {
+    const value = getLocalDateString(row.updated_at);
+    return value >= start && value <= end;
+  });
+}
+
+export function formatDateRangeLabel(dateFrom: string, dateTo: string) {
+  if (!dateFrom && !dateTo) return null;
+  if (dateFrom && dateTo && dateFrom === dateTo) return dateFrom;
+  if (dateFrom && dateTo) return `${dateFrom} – ${dateTo}`;
+  if (dateFrom) return `dari ${dateFrom}`;
+  return `sampai ${dateTo}`;
 }
 
 export function filterResiRows(
@@ -59,7 +79,6 @@ export function filterResiRows(
     searchQuery: string;
     statusFilter: ResiFilterStatus;
     courierFilter: ResiFilterCourier;
-    dateFilter: string;
   },
 ): ResiRow[] {
   let result = rows;
@@ -74,12 +93,6 @@ export function filterResiRows(
 
   if (options.courierFilter !== "all") {
     result = result.filter((row) => row.courier === options.courierFilter);
-  }
-
-  if (options.dateFilter) {
-    result = result.filter((row) =>
-      isSameLocalDate(row.updated_at, options.dateFilter),
-    );
   }
 
   const query = options.searchQuery.trim().toLowerCase();
