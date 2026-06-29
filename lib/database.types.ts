@@ -6,9 +6,18 @@ export type ResiRow = {
   name: string;
   status: ResiStatus;
   alamat: string | null;
+  courier: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type CourierOptionRow = {
+  id: string;
+  name: string;
+  prefix: string | null;
+  sort_order: number;
+  created_at: string;
 };
 
 export type Database = {
@@ -22,6 +31,7 @@ export type Database = {
           name: string;
           status: ResiStatus;
           alamat?: string | null;
+          courier?: string | null;
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -32,9 +42,28 @@ export type Database = {
           name?: string;
           status?: ResiStatus;
           alamat?: string | null;
+          courier?: string | null;
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      courier_options: {
+        Row: CourierOptionRow;
+        Insert: {
+          id?: string;
+          name: string;
+          prefix?: string | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          prefix?: string | null;
+          sort_order?: number;
+          created_at?: string;
         };
         Relationships: [];
       };

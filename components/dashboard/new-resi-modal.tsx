@@ -1,16 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import type { ResiRow, ResiStatus } from "@/lib/database.types";
+import { detectCourier } from "@/lib/couriers";
+import type { CourierOptionRow, ResiRow, ResiStatus } from "@/lib/database.types";
 
 type NewResiModalProps = {
   resi: string;
   mode: "new" | "complete" | "edit";
   existing?: ResiRow;
+  courierOptions: CourierOptionRow[];
   onClose: () => void;
   onSave: (data: {
     name: string;
     status: ResiStatus;
+    courier: string;
     alamat: string;
     notes: string;
   }) => Promise<void>;
@@ -20,12 +23,16 @@ export function NewResiModal({
   resi,
   mode,
   existing,
+  courierOptions,
   onClose,
   onSave,
 }: NewResiModalProps) {
   const [name, setName] = useState(existing?.name ?? "");
   const [status, setStatus] = useState<ResiStatus>(
     existing?.status ?? "belum di pack",
+  );
+  const [courier, setCourier] = useState(
+    existing?.courier ?? detectCourier(resi, courierOptions) ?? "",
   );
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [alamat, setAlamat] = useState(existing?.alamat ?? "");
@@ -34,6 +41,7 @@ export function NewResiModal({
 
   const isComplete = mode === "complete";
   const isEdit = mode === "edit";
+  const detectedCourier = detectCourier(resi, courierOptions);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,7 +54,7 @@ export function NewResiModal({
     setError(null);
 
     try {
-      await onSave({ name, status, alamat, notes });
+      await onSave({ name, status, courier, alamat, notes });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal menyimpan");
       setSaving(false);
@@ -54,7 +62,7 @@ export function NewResiModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
       <button
         type="button"
         aria-label="Tutup"
@@ -62,7 +70,7 @@ export function NewResiModal({
         onClick={onClose}
       />
       <div
-        className="relative z-10 w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl"
+        className="relative z-10 max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-xl sm:max-w-md sm:rounded-xl sm:p-6"
         data-pause-scanner-focus
       >
         <h2 className="text-lg font-semibold text-zinc-900">
@@ -94,6 +102,12 @@ export function NewResiModal({
           )}
         </p>
 
+        {detectedCourier && !existing?.courier && (
+          <p className="mt-2 text-xs text-emerald-700">
+            Courier terdeteksi: {detectedCourier}
+          </p>
+        )}
+
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <div>
             <label
@@ -111,6 +125,29 @@ export function NewResiModal({
               className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none ring-emerald-500 focus:border-emerald-500 focus:ring-2"
               placeholder="Nama penerima / paket"
             />
+          </div>
+
+          <div>
+            <label
+              htmlFor="resi-courier"
+              className="block text-sm font-medium text-zinc-700"
+            >
+              Jasa Courier{" "}
+              <span className="font-normal text-zinc-400">(opsional)</span>
+            </label>
+            <select
+              id="resi-courier"
+              value={courier}
+              onChange={(e) => setCourier(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none ring-emerald-500 focus:border-emerald-500 focus:ring-2"
+            >
+              <option value="">Pilih courier...</option>
+              {courierOptions.map((option) => (
+                <option key={option.id} value={option.name}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

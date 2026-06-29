@@ -6,6 +6,7 @@ export type NewResiInput = {
   name: string;
   status: ResiStatus;
   alamat?: string;
+  courier?: string;
   notes?: string;
 };
 
@@ -13,6 +14,7 @@ export type UpdateResiInput = {
   name: string;
   status: ResiStatus;
   alamat?: string;
+  courier?: string;
   notes?: string;
 };
 
@@ -80,6 +82,7 @@ export async function insertResi(input: NewResiInput): Promise<ResiRow> {
       name: input.name.trim(),
       status: input.status,
       alamat: input.alamat?.trim() || null,
+      courier: input.courier?.trim() || null,
       notes: input.notes?.trim() || null,
     })
     .select("*")
@@ -102,6 +105,7 @@ export async function updateResi(
       name: input.name.trim(),
       status: input.status,
       alamat: input.alamat?.trim() || null,
+      courier: input.courier?.trim() || null,
       notes: input.notes?.trim() || null,
     })
     .eq("id", id)

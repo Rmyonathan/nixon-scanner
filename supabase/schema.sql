@@ -6,6 +6,7 @@ create table if not exists public.resi (
   name text not null,
   status text not null check (status in ('pengiriman', 'belum di pack')),
   alamat text,
+  courier text,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

@@ -10,9 +10,13 @@ import {
   updateResi,
   updateResiStatus,
 } from "@/lib/resi";
-import { filterResiRows, type ResiFilterStatus } from "@/lib/resi-filters";
+import { getCourierOptions } from "@/lib/courier-options";
+import { defaultCourierOptions } from "@/lib/couriers";
+import { filterResiRows, type ResiFilterCourier, type ResiFilterStatus } from "@/lib/resi-filters";
+import { playScanSound } from "@/lib/scan-audio";
 import { getSupabaseConfigError } from "@/lib/supabase";
-import type { ResiRow, ResiStatus } from "@/lib/database.types";
+import type { CourierOptionRow, ResiRow, ResiStatus } from "@/lib/database.types";
+import { CourierSettingsModal } from "@/components/dashboard/courier-settings-modal";
 import { NewResiModal } from "@/components/dashboard/new-resi-modal";
 import { ResiTable } from "@/components/dashboard/resi-table";
 import { ResiToolbar } from "@/components/dashboard/resi-toolbar";
@@ -39,7 +43,13 @@ export default function DashboardPage() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ResiFilterStatus>("all");
+  const [courierFilter, setCourierFilter] = useState<ResiFilterCourier>("all");
+  const [dateFilter, setDateFilter] = useState("");
   const [scanFilter, setScanFilter] = useState<string | null>(null);
+  const [courierOptions, setCourierOptions] = useState<CourierOptionRow[]>(
+    defaultCourierOptions(),
+  );
+  const [showCourierSettings, setShowCourierSettings] = useState(false);
   const [highlightedResi, setHighlightedResi] = useState<string | null>(null);
   const [toast, setToast] = useState<{
     message: string;
@@ -53,8 +63,10 @@ export default function DashboardPage() {
         scanFilter,
         searchQuery,
         statusFilter,
+        courierFilter,
+        dateFilter,
       }),
-    [rows, scanFilter, searchQuery, statusFilter],
+    [rows, scanFilter, searchQuery, statusFilter, courierFilter, dateFilter],
   );
 
   useEffect(() => {
@@ -73,9 +85,15 @@ export default function DashboardPage() {
 
     async function load() {
       try {
-        const data = await getRecentResi();
+        const [data, couriers] = await Promise.all([
+          getRecentResi(),
+          getCourierOptions().catch(() => defaultCourierOptions()),
+        ]);
         if (!cancelled) {
           setRows(data);
+          setCourierOptions(
+            couriers.length > 0 ? couriers : defaultCourierOptions(),
+          );
           setConnectionError(null);
         }
       } catch (err) {
@@ -116,6 +134,8 @@ export default function DashboardPage() {
     setHighlightedResi(null);
     setSearchQuery("");
     setStatusFilter("all");
+    setCourierFilter("all");
+    setDateFilter("");
   }
 
   function openInputModal(
@@ -140,6 +160,7 @@ export default function DashboardPage() {
       if (existing && resiHasDetails(existing)) {
         bumpRowToTop(existing);
         focusScannedResi(resi);
+        playScanSound("success");
         setToast({
           message: `${resi} ditemukan — ${STATUS_LABELS[existing.status]}`,
           variant: "success",
@@ -147,6 +168,7 @@ export default function DashboardPage() {
       } else {
         openModal = true;
         openInputModal(resi, existing ? "complete" : "new", existing ?? undefined);
+        playScanSound("error");
         setToast({
           message: existing
             ? `${resi} belum ada datanya. Silakan isi form.`
@@ -159,6 +181,7 @@ export default function DashboardPage() {
       setConnectionError(message);
       openModal = true;
       openInputModal(resi, "new");
+      playScanSound("error");
       setToast({
         message: "Tidak dapat cek database. Silakan input data resi.",
         variant: "error",
@@ -182,6 +205,7 @@ export default function DashboardPage() {
   async function handleSaveResi(data: {
     name: string;
     status: ResiStatus;
+    courier: string;
     alamat: string;
     notes: string;
   }) {
@@ -193,6 +217,7 @@ export default function DashboardPage() {
           resi: modal.resi,
           name: data.name,
           status: data.status,
+          courier: data.courier,
           alamat: data.alamat,
           notes: data.notes,
         });
@@ -201,6 +226,7 @@ export default function DashboardPage() {
     focusScannedResi(saved.resi);
     setModal(null);
     setConnectionError(null);
+    playScanSound("success");
     setToast({
       message: `${saved.resi} berhasil disimpan`,
       variant: "success",
@@ -235,7 +261,7 @@ export default function DashboardPage() {
   }
 
   function refocusScannerIfAllowed() {
-    if (modal) return;
+    if (modal || showCourierSettings) return;
 
     const active = document.activeElement;
     if (active?.closest("[data-pause-scanner-focus]")) return;
@@ -244,31 +270,43 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-full bg-zinc-100">
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-zinc-900">
-              Resi Scanner
-            </h1>
-            <p className="mt-0.5 text-sm text-zinc-500">
-              Scan barcode untuk cek atau tambah resi
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`inline-flex h-2 w-2 rounded-full ${
-                scanning ? "animate-pulse bg-amber-400" : "bg-emerald-500"
-              }`}
-            />
-            <span className="text-sm text-zinc-600">
-              {scanning ? "Memproses..." : "Siap scan"}
-            </span>
+    <div className="min-h-full bg-gradient-to-b from-zinc-100 via-zinc-50 to-zinc-100">
+      <header className="border-b border-zinc-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
+        <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-5 lg:px-8">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-zinc-900 sm:text-2xl">
+                Resi Scanner
+              </h1>
+              <p className="mt-0.5 text-sm text-zinc-500">
+                Scan barcode untuk cek atau tambah resi
+              </p>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCourierSettings(true)}
+                data-pause-scanner-focus
+                className="min-h-11 flex-1 rounded-xl border border-violet-200 bg-violet-50 px-3 text-sm font-medium text-violet-800 shadow-sm transition active:bg-violet-100 sm:flex-none sm:px-3.5"
+              >
+                Kelola Courier
+              </button>
+              <div className="flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3">
+                <span
+                  className={`inline-flex h-2 w-2 rounded-full ${
+                    scanning ? "animate-pulse bg-amber-400" : "bg-emerald-500"
+                  }`}
+                />
+                <span className="text-xs font-medium text-zinc-600 sm:text-sm">
+                  {scanning ? "..." : "Siap"}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-7xl px-3 py-4 pb-8 sm:px-6 sm:py-8 lg:px-8">
         {connectionError && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <p className="font-medium">Koneksi database gagal</p>
@@ -284,41 +322,68 @@ export default function DashboardPage() {
 
         <StatsCards rows={rows} />
 
-        <section className="mb-6 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <section className="mb-4 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm ring-1 ring-zinc-950/5 sm:mb-6 sm:p-5">
           <label
             htmlFor="scanner-input"
-            className="mb-2 block text-xs font-medium uppercase tracking-wide text-zinc-500"
+            className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500"
           >
             Scanner input
           </label>
-          <input
-            ref={inputRef}
-            id="scanner-input"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            autoFocus
-            value={scanBuffer}
-            onChange={(e) => setScanBuffer(e.target.value)}
-            onKeyDown={handleScanKeyDown}
-            onBlur={() => {
-              requestAnimationFrame(refocusScannerIfAllowed);
-            }}
-            placeholder="Arahkan scanner ke sini..."
-            className="w-full rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3 font-mono text-lg text-zinc-900 outline-none ring-emerald-500 transition focus:border-emerald-500 focus:bg-white focus:ring-2"
-          />
-          <p className="mt-2 text-xs text-zinc-400">
-            Scan + Enter menampilkan hanya resi yang cocok. Klik{" "}
-            <span className="font-medium">Tampilkan semua</span> untuk melihat
-            seluruh daftar.
+          <div className="flex items-stretch gap-2">
+            <input
+              ref={inputRef}
+              id="scanner-input"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              autoFocus
+              value={scanBuffer}
+              onChange={(e) => setScanBuffer(e.target.value)}
+              onKeyDown={handleScanKeyDown}
+              onBlur={() => {
+                requestAnimationFrame(refocusScannerIfAllowed);
+              }}
+              placeholder="Arahkan scanner ke sini..."
+              className="min-w-0 flex-1 rounded-xl border-2 border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-base text-zinc-900 shadow-inner outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/15 sm:px-4 sm:py-3.5 sm:text-lg"
+            />
+            <button
+              type="button"
+              aria-label="Cari resi"
+              data-pause-scanner-focus
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleScanSubmit(scanBuffer)}
+              disabled={scanning || !scanBuffer.trim()}
+              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm transition active:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:h-auto sm:w-auto sm:px-4 sm:py-3.5"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"
+                />
+              </svg>
+            </button>
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-zinc-500">
+            Scan + Enter (atau tombol hijau) menampilkan hanya resi yang cocok.
+            Klik{" "}
+            <span className="font-medium text-zinc-700">Tampilkan semua</span>{" "}
+            untuk melihat seluruh daftar.
           </p>
         </section>
 
         <section
-          className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
+          className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm ring-1 ring-zinc-950/5"
           data-pause-scanner-focus
         >
-          <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-zinc-200/80 bg-zinc-50/80 px-4 py-3 sm:px-5 sm:py-3.5">
             <h2 className="text-sm font-semibold text-zinc-900">
               Daftar Resi
             </h2>
@@ -327,11 +392,17 @@ export default function DashboardPage() {
           <ResiToolbar
             searchQuery={searchQuery}
             statusFilter={statusFilter}
+            courierFilter={courierFilter}
+            dateFilter={dateFilter}
             scanFilter={scanFilter}
             resultCount={displayedRows.length}
             totalCount={rows.length}
+            displayedRows={displayedRows}
+            courierOptions={courierOptions}
             onSearchChange={setSearchQuery}
             onStatusFilterChange={setStatusFilter}
+            onCourierFilterChange={setCourierFilter}
+            onDateFilterChange={setDateFilter}
             onClearScanFilter={() => {
               setScanFilter(null);
               setHighlightedResi(null);
@@ -357,11 +428,23 @@ export default function DashboardPage() {
           resi={modal.resi}
           mode={modal.mode}
           existing={modal.existing}
+          courierOptions={courierOptions}
           onClose={() => {
             setModal(null);
             inputRef.current?.focus();
           }}
           onSave={handleSaveResi}
+        />
+      )}
+
+      {showCourierSettings && (
+        <CourierSettingsModal
+          courierOptions={courierOptions}
+          onClose={() => {
+            setShowCourierSettings(false);
+            inputRef.current?.focus();
+          }}
+          onUpdated={setCourierOptions}
         />
       )}
 
