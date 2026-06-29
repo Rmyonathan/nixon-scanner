@@ -6,28 +6,37 @@ import {
   formatResiError,
   getRecentResi,
   getResiByNumber,
+  deleteResi,
   insertResi,
-  resiHasDetails,
+  insertResiScan,
+  touchResi,
   updateResi,
   updateResiStatus,
 } from "@/lib/resi";
 import { getCourierOptions } from "@/lib/courier-options";
 import { defaultCourierOptions } from "@/lib/couriers";
-import { filterResiRows, type ResiFilterCourier, type ResiFilterStatus } from "@/lib/resi-filters";
+import { filterResiRows, filterRowsByDate, getTodayLocalDate, type ResiFilterCourier, type ResiFilterStatus } from "@/lib/resi-filters";
 import { playScanSound } from "@/lib/scan-audio";
 import { getSupabaseConfigError } from "@/lib/supabase";
 import type { CourierOptionRow, ResiRow, ResiStatus } from "@/lib/database.types";
 import { CourierSettingsModal } from "@/components/dashboard/courier-settings-modal";
+import { DataViewToggle } from "@/components/dashboard/data-view-toggle";
 import { NewResiModal } from "@/components/dashboard/new-resi-modal";
 import { ResiTable } from "@/components/dashboard/resi-table";
 import { ResiToolbar } from "@/components/dashboard/resi-toolbar";
+import { ScanModeToggle } from "@/components/dashboard/scan-mode-toggle";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { Toast } from "@/components/dashboard/toast";
-
-const STATUS_LABELS: Record<ResiStatus, string> = {
-  pengiriman: "Pengiriman",
-  "belum di pack": "Belum di pack",
-};
+import {
+  getStoredScanMode,
+  storeScanMode,
+  type ScanMode,
+} from "@/lib/scan-mode";
+import {
+  getStoredDataViewMode,
+  storeDataViewMode,
+  type DataViewMode,
+} from "@/lib/data-view-mode";
 
 type ModalState = {
   resi: string;
@@ -58,17 +67,39 @@ export default function DashboardPage() {
     variant: "success" | "error";
   } | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [scanMode, setScanMode] = useState<ScanMode>(
+    () => getStoredScanMode(),
+  );
+  const [dataViewMode, setDataViewMode] = useState<DataViewMode>(
+    () => getStoredDataViewMode(),
+  );
+
+  const effectiveDateFilter =
+    dataViewMode === "today" ? getTodayLocalDate() : dateFilter;
+
+  const viewScopedRows = useMemo(
+    () => filterRowsByDate(rows, effectiveDateFilter),
+    [rows, effectiveDateFilter],
+  );
 
   const displayedRows = useMemo(
     () =>
-      filterResiRows(rows, {
+      filterResiRows(viewScopedRows, {
         scanFilter,
         searchQuery,
         statusFilter,
         courierFilter,
-        dateFilter,
+        dateFilter: "",
       }),
-    [rows, scanFilter, searchQuery, statusFilter, courierFilter, dateFilter],
+    [viewScopedRows, scanFilter, searchQuery, statusFilter, courierFilter],
+  );
+
+  const todayLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(
+        new Date(),
+      ),
+    [],
   );
 
   useEffect(() => {
@@ -76,19 +107,22 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    const configError = getSupabaseConfigError();
-    if (configError) {
-      setConnectionError(configError);
-      setLoading(false);
-      return;
-    }
-
     let cancelled = false;
 
     async function load() {
+      const configError = getSupabaseConfigError();
+      if (configError) {
+        if (!cancelled) {
+          setConnectionError(configError);
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
+        const limit = dataViewMode === "all" ? 2000 : 500;
         const [data, couriers] = await Promise.all([
-          getRecentResi(),
+          getRecentResi(limit),
           getCourierOptions().catch(() => defaultCourierOptions()),
         ]);
         if (!cancelled) {
@@ -113,7 +147,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [dataViewMode]);
 
   useEffect(() => {
     if (!toast) return;
@@ -148,52 +182,81 @@ export default function DashboardPage() {
     setModal({ resi, mode, existing });
   }
 
+  function handleScanModeChange(mode: ScanMode) {
+    setScanMode(mode);
+    storeScanMode(mode);
+    inputRef.current?.focus();
+  }
+
+  function handleDataViewModeChange(mode: DataViewMode) {
+    setDataViewMode(mode);
+    storeDataViewMode(mode);
+    if (mode === "today") {
+      setDateFilter("");
+    }
+    setScanFilter(null);
+    setHighlightedResi(null);
+    inputRef.current?.focus();
+  }
+
   async function handleScanSubmit(rawValue: string) {
     const resi = rawValue.trim();
     if (!resi) return;
 
     setScanning(true);
-    let openModal = false;
 
     try {
       const existing = await getResiByNumber(resi);
       setConnectionError(null);
 
-      if (existing && resiHasDetails(existing)) {
-        bumpRowToTop(existing);
+      if (scanMode === "sebelum_di_pack") {
+        const saved = existing
+          ? await touchResi(existing)
+          : await insertResiScan(resi);
+
+        bumpRowToTop(saved);
         focusScannedResi(resi);
         playScanSound("success");
         setToast({
-          message: `${resi} ditemukan — ${STATUS_LABELS[existing.status]}`,
+          message: existing
+            ? `${resi} diperbarui`
+            : `${resi} disimpan — Belum di pack`,
           variant: "success",
         });
       } else {
-        openModal = true;
-        openInputModal(resi, existing ? "complete" : "new", existing ?? undefined);
-        playScanSound("error");
+        if (!existing) {
+          playScanSound("error");
+          setToast({
+            message: `${resi} tidak ditemukan. Scan dulu di mode Sebelum di pack.`,
+            variant: "error",
+          });
+          return;
+        }
+
+        const updated = await updateResiStatus(existing.id, "dikirim");
+        bumpRowToTop(updated);
+        focusScannedResi(resi);
+        playScanSound("success");
         setToast({
-          message: existing
-            ? `${resi} belum ada datanya. Silakan isi form.`
-            : `${resi} tidak ditemukan. Silakan input data.`,
-          variant: "error",
+          message:
+            existing.status === "dikirim"
+              ? `${resi} sudah dikirim`
+              : `${resi} ditandai dikirim`,
+          variant: "success",
         });
       }
     } catch (err) {
       const message = formatResiError(err);
       setConnectionError(message);
-      openModal = true;
-      openInputModal(resi, "new");
       playScanSound("error");
       setToast({
-        message: "Tidak dapat cek database. Silakan input data resi.",
+        message,
         variant: "error",
       });
     } finally {
       setScanning(false);
       setScanBuffer("");
-      if (!openModal) {
-        inputRef.current?.focus();
-      }
+      inputRef.current?.focus();
     }
   }
 
@@ -238,11 +301,11 @@ export default function DashboardPage() {
 
   async function handleQuickPack(row: ResiRow) {
     try {
-      const updated = await updateResiStatus(row.id, "pengiriman");
+      const updated = await updateResiStatus(row.id, "dikirim");
       bumpRowToTop(updated);
       focusScannedResi(updated.resi);
       setToast({
-        message: `${updated.resi} ditandai pengiriman`,
+        message: `${updated.resi} ditandai dikirim`,
         variant: "success",
       });
     } catch (err) {
@@ -259,6 +322,31 @@ export default function DashboardPage() {
       setToast({ message: `Resi ${resi} disalin`, variant: "success" });
     } catch {
       setToast({ message: "Gagal menyalin resi", variant: "error" });
+    }
+  }
+
+  async function handleDeleteResi(row: ResiRow) {
+    const confirmed = window.confirm(
+      `Hapus resi ${row.resi} dari database? Tindakan ini tidak dapat dibatalkan.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteResi(row.id);
+      setRows((prev) => prev.filter((item) => item.id !== row.id));
+      if (scanFilter === row.resi) {
+        setScanFilter(null);
+        setHighlightedResi(null);
+      }
+      setToast({
+        message: `${row.resi} dihapus`,
+        variant: "success",
+      });
+    } catch (err) {
+      setToast({
+        message: formatResiError(err),
+        variant: "error",
+      });
     }
   }
 
@@ -287,7 +375,7 @@ export default function DashboardPage() {
                 Resi Scanner
               </h1>
               <p className="mt-0.5 text-sm text-zinc-500">
-                Scan barcode untuk cek atau tambah resi
+                Pilih mode scan, lalu arahkan barcode ke input
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -336,9 +424,21 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <StatsCards rows={rows} />
+        <section className="mb-4 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm ring-1 ring-zinc-950/5 sm:mb-6 sm:p-5">
+          <DataViewToggle
+            mode={dataViewMode}
+            todayLabel={todayLabel}
+            onChange={handleDataViewModeChange}
+          />
+        </section>
+
+        <StatsCards rows={viewScopedRows} />
 
         <section className="mb-4 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm ring-1 ring-zinc-950/5 sm:mb-6 sm:p-5">
+          <div className="mb-4 border-b border-zinc-100 pb-4">
+            <ScanModeToggle mode={scanMode} onChange={handleScanModeChange} />
+          </div>
+
           <label
             htmlFor="scanner-input"
             className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500"
@@ -388,10 +488,17 @@ export default function DashboardPage() {
             </button>
           </div>
           <p className="mt-3 text-xs leading-relaxed text-zinc-500">
-            Scan + Enter (atau tombol hijau) menampilkan hanya resi yang cocok.
-            Klik{" "}
-            <span className="font-medium text-zinc-700">Tampilkan semua</span>{" "}
-            untuk melihat seluruh daftar.
+            {scanMode === "sebelum_di_pack" ? (
+              <>
+                Mode <span className="font-medium text-zinc-700">Sebelum di pack</span>
+                : resi langsung disimpan. Edit manual lewat tombol Edit di tabel.
+              </>
+            ) : (
+              <>
+                Mode <span className="font-medium text-zinc-700">Setelah di pack</span>
+                : scan resi yang sudah ada untuk mengubah status menjadi dikirim.
+              </>
+            )}
           </p>
         </section>
 
@@ -410,9 +517,10 @@ export default function DashboardPage() {
             statusFilter={statusFilter}
             courierFilter={courierFilter}
             dateFilter={dateFilter}
+            dataViewMode={dataViewMode}
             scanFilter={scanFilter}
             resultCount={displayedRows.length}
-            totalCount={rows.length}
+            totalCount={viewScopedRows.length}
             displayedRows={displayedRows}
             courierOptions={courierOptions}
             onSearchChange={setSearchQuery}
@@ -434,6 +542,7 @@ export default function DashboardPage() {
             highlightedResi={highlightedResi}
             onQuickPack={handleQuickPack}
             onEdit={(row) => openInputModal(row.resi, "edit", row)}
+            onDelete={handleDeleteResi}
             onCopyResi={handleCopyResi}
           />
         </section>

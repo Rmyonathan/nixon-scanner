@@ -31,7 +31,7 @@ export function StatsCards({ rows }: StatsCardsProps) {
           Kirim
         </p>
         <p className="mt-1 text-2xl font-bold tabular-nums text-blue-950 sm:mt-2 sm:text-3xl">
-          {stats.pengiriman}
+          {stats.dikirim}
         </p>
       </div>
     </div>

@@ -1,9 +1,9 @@
-export type ResiStatus = "pengiriman" | "belum di pack";
+export type ResiStatus = "belum di pack" | "dikirim";
 
 export type ResiRow = {
   id: string;
   resi: string;
-  name: string;
+  name: string | null;
   status: ResiStatus;
   alamat: string | null;
   courier: string | null;
@@ -28,7 +28,7 @@ export type Database = {
         Insert: {
           id?: string;
           resi: string;
-          name: string;
+          name?: string | null;
           status: ResiStatus;
           alamat?: string | null;
           courier?: string | null;
@@ -39,7 +39,7 @@ export type Database = {
         Update: {
           id?: string;
           resi?: string;
-          name?: string;
+          name?: string | null;
           status?: ResiStatus;
           alamat?: string | null;
           courier?: string | null;
@@ -60,7 +60,7 @@ export type Database = {
         };
         Update: {
           id?: string;
-          name?: string;
+          name?: string | null;
           prefix?: string | null;
           sort_order?: number;
           created_at?: string;

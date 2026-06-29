@@ -1,7 +1,7 @@
 import type { ResiRow } from "@/lib/database.types";
 
 const STATUS_LABELS: Record<ResiRow["status"], string> = {
-  pengiriman: "Pengiriman",
+  dikirim: "Dikirim",
   "belum di pack": "Belum di pack",
 };
 

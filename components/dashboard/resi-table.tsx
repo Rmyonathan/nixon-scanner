@@ -1,12 +1,12 @@
 import type { ResiRow, ResiStatus } from "@/lib/database.types";
 
 const STATUS_STYLES: Record<ResiStatus, string> = {
-  pengiriman: "bg-blue-100 text-blue-800 ring-blue-300/50",
+  dikirim: "bg-emerald-100 text-emerald-800 ring-emerald-300/50",
   "belum di pack": "bg-amber-100 text-amber-800 ring-amber-300/50",
 };
 
 const STATUS_LABELS: Record<ResiStatus, string> = {
-  pengiriman: "Pengiriman",
+  dikirim: "Dikirim",
   "belum di pack": "Belum di pack",
 };
 
@@ -22,6 +22,47 @@ function formatDate(iso: string) {
   }).format(new Date(iso));
 }
 
+function rowCellClass(row: ResiRow, isHighlighted: boolean) {
+  if (row.status === "dikirim") {
+    return isHighlighted
+      ? "border border-emerald-300 bg-emerald-100/95 px-4 py-2.5 align-middle"
+      : "border border-emerald-200 bg-emerald-50/95 px-4 py-2.5 align-middle";
+  }
+
+  if (isHighlighted) {
+    return "border border-emerald-300 bg-emerald-50/90 px-4 py-2.5 align-middle";
+  }
+
+  return CELL;
+}
+
+function TrashButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Hapus resi"
+      title="Hapus"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 shadow-sm transition hover:bg-red-100 active:bg-red-200"
+    >
+      <svg
+        className="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+        aria-hidden
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+        />
+      </svg>
+    </button>
+  );
+}
+
 type ResiTableProps = {
   rows: ResiRow[];
   allRowsEmpty: boolean;
@@ -30,6 +71,7 @@ type ResiTableProps = {
   highlightedResi?: string | null;
   onQuickPack?: (row: ResiRow) => void;
   onEdit?: (row: ResiRow) => void;
+  onDelete?: (row: ResiRow) => void;
   onCopyResi?: (resi: string) => void;
 };
 
@@ -53,20 +95,26 @@ function ResiMobileCard({
   isHighlighted,
   onQuickPack,
   onEdit,
+  onDelete,
   onCopyResi,
 }: {
   row: ResiRow;
   isHighlighted: boolean;
   onQuickPack?: (row: ResiRow) => void;
   onEdit?: (row: ResiRow) => void;
+  onDelete?: (row: ResiRow) => void;
   onCopyResi?: (resi: string) => void;
 }) {
+  const isDikirim = row.status === "dikirim";
+
   return (
     <article
       className={`rounded-2xl border p-4 shadow-sm ${
-        isHighlighted
-          ? "border-emerald-300 bg-emerald-50/80 ring-2 ring-emerald-200"
-          : "border-zinc-200 bg-zinc-50/90"
+        isDikirim
+          ? "border-emerald-200 bg-emerald-50/95"
+          : isHighlighted
+            ? "border-emerald-300 bg-emerald-50/80 ring-2 ring-emerald-200"
+            : "border-zinc-200 bg-zinc-50/90"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -157,6 +205,29 @@ function ResiMobileCard({
             Edit
           </button>
         )}
+        {onDelete && (
+          <button
+            type="button"
+            onClick={() => onDelete(row)}
+            aria-label="Hapus resi"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 shadow-sm active:bg-red-100"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+          </button>
+        )}
       </div>
     </article>
   );
@@ -170,6 +241,7 @@ export function ResiTable({
   highlightedResi,
   onQuickPack,
   onEdit,
+  onDelete,
   onCopyResi,
 }: ResiTableProps) {
   if (loading) {
@@ -183,7 +255,7 @@ export function ResiTable({
         description={
           connectionError
             ? "Database belum terhubung. Setelah URL Supabase benar, scan resi untuk menambah data."
-            : "Scan nomor resi di input atas. Jika belum ada datanya, form input akan muncul otomatis."
+            : "Scan resi di mode Sebelum di pack untuk mulai menambah data."
         }
       />
     );
@@ -208,6 +280,7 @@ export function ResiTable({
             isHighlighted={highlightedResi === row.resi}
             onQuickPack={onQuickPack}
             onEdit={onEdit}
+            onDelete={onDelete}
             onCopyResi={onCopyResi}
           />
         ))}
@@ -230,14 +303,17 @@ export function ResiTable({
           <tbody>
             {rows.map((row) => {
               const isHighlighted = highlightedResi === row.resi;
-              const cellClass = isHighlighted
-                ? "border border-emerald-300 bg-emerald-50/90 px-4 py-2.5 align-middle"
-                : CELL;
+              const cellClass = rowCellClass(row, isHighlighted);
+              const isDikirim = row.status === "dikirim";
 
               return (
                 <tr
                   key={row.id}
-                  className="transition-colors hover:[&>td]:bg-zinc-100/90"
+                  className={
+                    isDikirim
+                      ? "transition-colors hover:[&>td]:bg-emerald-100/90"
+                      : "transition-colors hover:[&>td]:bg-zinc-100/90"
+                  }
                 >
                   <td className={`${cellClass} whitespace-nowrap`}>
                     <button
@@ -302,6 +378,9 @@ export function ResiTable({
                         >
                           Edit
                         </button>
+                      )}
+                      {onDelete && (
+                        <TrashButton onClick={() => onDelete(row)} />
                       )}
                     </div>
                   </td>

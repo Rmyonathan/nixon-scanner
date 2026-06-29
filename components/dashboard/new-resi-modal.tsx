@@ -45,7 +45,7 @@ export function NewResiModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) {
+    if (!isEdit && !name.trim()) {
       setError("Nama wajib diisi");
       return;
     }
@@ -114,7 +114,11 @@ export function NewResiModal({
               htmlFor="resi-name"
               className="block text-sm font-medium text-zinc-700"
             >
-              Nama
+              Nama{" "}
+              {!isEdit && <span className="text-red-500">*</span>}
+              {isEdit && (
+                <span className="font-normal text-zinc-400">(opsional)</span>
+              )}
             </label>
             <input
               id="resi-name"
@@ -164,7 +168,7 @@ export function NewResiModal({
               className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none ring-emerald-500 focus:border-emerald-500 focus:ring-2"
             >
               <option value="belum di pack">Belum di pack</option>
-              <option value="pengiriman">Pengiriman</option>
+              <option value="dikirim">Dikirim</option>
             </select>
           </div>
 

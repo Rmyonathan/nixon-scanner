@@ -1,5 +1,6 @@
 import type { CourierOptionRow, ResiRow } from "@/lib/database.types";
 import { exportResiRowsToXlsx } from "@/lib/export-xlsx";
+import type { DataViewMode } from "@/lib/data-view-mode";
 import type { ResiFilterCourier, ResiFilterStatus } from "@/lib/resi-filters";
 
 type ResiToolbarProps = {
@@ -7,6 +8,7 @@ type ResiToolbarProps = {
   statusFilter: ResiFilterStatus;
   courierFilter: ResiFilterCourier;
   dateFilter: string;
+  dataViewMode: DataViewMode;
   scanFilter: string | null;
   resultCount: number;
   totalCount: number;
@@ -28,6 +30,7 @@ export function ResiToolbar({
   statusFilter,
   courierFilter,
   dateFilter,
+  dataViewMode,
   scanFilter,
   resultCount,
   totalCount,
@@ -43,7 +46,7 @@ export function ResiToolbar({
   const hasFilters =
     Boolean(scanFilter) ||
     Boolean(searchQuery.trim()) ||
-    Boolean(dateFilter) ||
+    (dataViewMode === "all" && Boolean(dateFilter)) ||
     statusFilter !== "all" ||
     courierFilter !== "all";
 
@@ -80,17 +83,19 @@ export function ResiToolbar({
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center">
-          <label className="flex min-h-11 flex-col justify-center gap-1 text-sm text-zinc-600 sm:flex-row sm:items-center sm:gap-2">
-            <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500 sm:normal-case sm:tracking-normal">
-              Tanggal
-            </span>
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => onDateFilterChange(e.target.value)}
-              className={fieldClass}
-            />
-          </label>
+          {dataViewMode === "all" && (
+            <label className="flex min-h-11 flex-col justify-center gap-1 text-sm text-zinc-600 sm:flex-row sm:items-center sm:gap-2">
+              <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-zinc-500 sm:normal-case sm:tracking-normal">
+                Tanggal
+              </span>
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => onDateFilterChange(e.target.value)}
+                className={fieldClass}
+              />
+            </label>
+          )}
 
           <select
             value={courierFilter}
@@ -114,7 +119,7 @@ export function ResiToolbar({
           >
             <option value="all">Semua status</option>
             <option value="belum di pack">Belum di pack</option>
-            <option value="pengiriman">Pengiriman</option>
+            <option value="dikirim">Dikirim</option>
           </select>
 
           <button
@@ -143,7 +148,12 @@ export function ResiToolbar({
               </button>
             </span>
           )}
-          {dateFilter && (
+          {dataViewMode === "today" && (
+            <span className="inline-flex min-h-11 items-center rounded-xl border border-sky-200 bg-sky-50 px-3 text-sm font-medium text-sky-800">
+              Filter: hari ini
+            </span>
+          )}
+          {dataViewMode === "all" && dateFilter && (
             <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
               Tanggal: {dateFilter}
               <button

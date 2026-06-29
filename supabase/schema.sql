@@ -3,8 +3,8 @@
 create table if not exists public.resi (
   id uuid primary key default gen_random_uuid(),
   resi text not null unique,
-  name text not null,
-  status text not null check (status in ('pengiriman', 'belum di pack')),
+  name text,
+  status text not null check (status in ('belum di pack', 'dikirim')),
   alamat text,
   courier text,
   notes text,
@@ -31,6 +31,11 @@ create policy "Allow anonymous update access"
   to anon
   using (true)
   with check (true);
+
+create policy "Allow anonymous delete access"
+  on public.resi for delete
+  to anon
+  using (true);
 
 create or replace function public.set_updated_at()
 returns trigger as $$

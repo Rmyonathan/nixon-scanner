@@ -3,7 +3,7 @@ import type { ResiRow, ResiStatus } from "@/lib/database.types";
 
 export type NewResiInput = {
   resi: string;
-  name: string;
+  name?: string;
   status: ResiStatus;
   alamat?: string;
   courier?: string;
@@ -11,7 +11,7 @@ export type NewResiInput = {
 };
 
 export type UpdateResiInput = {
-  name: string;
+  name?: string;
   status: ResiStatus;
   alamat?: string;
   courier?: string;
@@ -79,12 +79,48 @@ export async function insertResi(input: NewResiInput): Promise<ResiRow> {
     .from("resi")
     .insert({
       resi: input.resi.trim(),
-      name: input.name.trim(),
+      name: input.name?.trim() || null,
       status: input.status,
       alamat: input.alamat?.trim() || null,
       courier: input.courier?.trim() || null,
       notes: input.notes?.trim() || null,
     })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+export async function insertResiScan(resi: string): Promise<ResiRow> {
+  const { data, error } = await getSupabase()
+    .from("resi")
+    .insert({
+      resi: resi.trim(),
+      name: null,
+      status: "belum di pack",
+      alamat: null,
+      courier: null,
+      notes: null,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+export async function touchResi(row: ResiRow): Promise<ResiRow> {
+  const { data, error } = await getSupabase()
+    .from("resi")
+    .update({ status: row.status })
+    .eq("id", row.id)
     .select("*")
     .single();
 
@@ -102,7 +138,7 @@ export async function updateResi(
   const { data, error } = await getSupabase()
     .from("resi")
     .update({
-      name: input.name.trim(),
+      name: input.name?.trim() || null,
       status: input.status,
       alamat: input.alamat?.trim() || null,
       courier: input.courier?.trim() || null,
@@ -135,4 +171,12 @@ export async function updateResiStatus(
   }
 
   return data;
+}
+
+export async function deleteResi(id: string): Promise<void> {
+  const { error } = await getSupabase().from("resi").delete().eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }

@@ -39,6 +39,19 @@ function isSameLocalDate(iso: string, yyyyMmDd: string) {
   return `${year}-${month}-${day}` === yyyyMmDd;
 }
 
+export function getTodayLocalDate() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function filterRowsByDate(rows: ResiRow[], yyyyMmDd: string) {
+  if (!yyyyMmDd) return rows;
+  return rows.filter((row) => isSameLocalDate(row.updated_at, yyyyMmDd));
+}
+
 export function filterResiRows(
   rows: ResiRow[],
   options: {
@@ -81,6 +94,6 @@ export function getResiStats(rows: ResiRow[]) {
   return {
     total: rows.length,
     belumDiPack: rows.filter((row) => row.status === "belum di pack").length,
-    pengiriman: rows.filter((row) => row.status === "pengiriman").length,
+    dikirim: rows.filter((row) => row.status === "dikirim").length,
   };
 }
