@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   formatResiError,
   getRecentResi,
@@ -35,6 +36,7 @@ type ModalState = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [scanBuffer, setScanBuffer] = useState("");
   const [rows, setRows] = useState<ResiRow[]>([]);
@@ -269,6 +271,12 @@ export default function DashboardPage() {
     inputRef.current?.focus();
   }
 
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
+
   return (
     <div className="min-h-full bg-gradient-to-b from-zinc-100 via-zinc-50 to-zinc-100">
       <header className="border-b border-zinc-200/80 bg-white/90 shadow-sm backdrop-blur-sm">
@@ -282,7 +290,7 @@ export default function DashboardPage() {
                 Scan barcode untuk cek atau tambah resi
               </p>
             </div>
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setShowCourierSettings(true)}
@@ -290,6 +298,14 @@ export default function DashboardPage() {
                 className="min-h-11 flex-1 rounded-xl border border-violet-200 bg-violet-50 px-3 text-sm font-medium text-violet-800 shadow-sm transition active:bg-violet-100 sm:flex-none sm:px-3.5"
               >
                 Kelola Courier
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                data-pause-scanner-focus
+                className="min-h-11 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 shadow-sm transition active:bg-zinc-100 sm:px-3.5"
+              >
+                Keluar
               </button>
               <div className="flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3">
                 <span
